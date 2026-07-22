@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analizador de Euromillones con IA</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+
+  <style>
+    :root {
+      --primary: #2c3e50;
+      --accent: #3498db;
+      --hot: #e74c3c;
+      --warm: #e67e22;
+      --cold: #2980b9;
+      --bg: #f4f6f9;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: var(--bg);
+      color: #333;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    header h1 {
+      color: var(--primary);
+      margin-bottom: 5px;
+    }
+
+    .card {
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 8px 14px;
+      margin: 4px;
+      border-radius: 20px;
+      color: white;
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    .hot { background-color: var(--hot); }
+    .warm { background-color: var(--warm); }
+    .cold { background-color: var(--cold); }
+
+    .btn {
+      background-color: var(--accent);
+      color: white;
+      padding: 10px 18px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: opacity 0.2s;
+    }
+
+    .btn:hover {
+      opacity: 0.9;
+    }
+
+    .btn-success { background-color: #27ae60; }
+    .btn-ai { background-color: #8e44ad; }
+
+    input[type="file"], input[type="text"], input[type="date"] {
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      margin-right: 5px;
+      margin-bottom: 10px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    #aiStatus {
+      margin-top: 10px;
+      font-style: italic;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1>🎰 Analizador de Euromillones</h1>
+      <p>Estadísticas de Frecuencia, Co-ocurrencia y Módulo de Predicción IA</p>
+    </header>
+
+    <div class="card">
+      <h3>1. Cargar Histórico (.xlsx o .json)</h3>
+      <div class="form-group">
+        <input type="file" id="fileInput" accept=".xlsx, .xls, .json">
+        <button class="btn" onclick="cargarJSONPredeterminado()">Cargar 'sorteos.json' del servidor</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>2. Gestión de Datos y Nuevos Sorteos</h3>
+      <div class="form-group">
+        <input type="date" id="newFecha">
+        <input type="text" id="newNumeros" placeholder="Números (ej: 5,12,23,41,48)">
+        <input type="text" id="newEstrellas" placeholder="Estrellas (ej: 3,9)">
+        <button class="btn btn-success" onclick="agregarSorteo()">Añadir Sorteo</button>
+        <button class="btn" onclick="exportarJSON()">Descargar .JSON Actualizado</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🤖 Módulo de IA (TensorFlow.js)</h3>
+      <p>Entrena una red neuronal con los sorteos cargados para generar probabilidades.</p>
+      <button class="btn btn-ai" onclick="entrenarIA()">Ejecutar Análisis Predictivo IA</button>
+      <div id="aiStatus">Estado de la IA: Esperando datos...</div>
+      <div id="aiOutput" style="margin-top: 15px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>📊 Análisis Estadístico Tradicional (<span id="totalSorteos">0</span> sorteos)</h2>
+      <div class="grid">
+        <div>
+          <h3>🔥 Números Calientes</h3>
+          <div id="hotNumbers"></div>
+        </div>
+        <div>
+          <h3>🟧 Números Templados</h3>
+          <div id="warmNumbers"></div>
+        </div>
+        <div>
+          <h3>❄️ Números Fríos</h3>
+          <div id="coldNumbers"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>⭐ Análisis de Estrellas</h2>
+      <p><strong>Estrellas Calientes:</strong> <span id="hotStars">-</span></p>
+      <p><strong>Estrellas Templadas:</strong> <span id="warmStars">-</span></p>
+      <p><strong>Estrellas Frías:</strong> <span id="coldStars">-</span></p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
