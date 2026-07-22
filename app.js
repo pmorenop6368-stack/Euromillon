@@ -237,7 +237,47 @@ async function entrenarIA() {
     <h4>🎯 Top 5 Números Sugeridos por la Red Neuronal:</h4>
     <p><strong>${recomendadosIA.join(' — ')}</strong></p>
   `;
+// Mapear probabilidades con los números correspondientes
+  const resultadosIA = [];
+  probabilidades.forEach((prob, index) => {
+    resultadosIA.push({ numero: index + 1, probabilidad: parseFloat((prob * 100).toFixed(2)) });
+  });
 
+  // Ordenar de mayor a menor probabilidad
+  resultadosIA.sort((a, b) => b.probabilidad - a.probabilidad);
+
+  // Tomamos los 5 mejores números
+  const top5 = resultadosIA.slice(0, 5);
+
+  statusEl.innerText = '¡Entrenamiento e Inferencia completados!';
+
+  // Renderizar las bolas de la combinación y sus probabilidades
+  let htmlResultados = `
+    <h4>🎯 Combinación Sugerida por la Red Neuronal:</h4>
+    <div class="combinacion-resultado" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+  `;
+
+  top5.forEach(item => {
+    const numFormateado = String(item.numero).padStart(2, '0');
+    htmlResultados += `
+      <div style="text-align: center;">
+        <span class="badge hot" style="font-size: 1.2rem; padding: 10px 15px; border-radius: 50%; display: inline-block;">
+          ${numFormateado}
+        </span>
+        <div style="font-size: 0.8rem; color: #666; margin-top: 4px;">${item.probabilidad}%</div>
+      </div>
+    `;
+  });
+
+  htmlResultados += `</div>`;
+  
+  outputEl.innerHTML = htmlResultados;
+
+  // Liberar memoria de tensores
+  xs.dispose();
+  ys.dispose();
+  prediccionTensor.dispose();
+}
   // Liberar memoria de tensores
   xs.dispose();
   ys.dispose();
