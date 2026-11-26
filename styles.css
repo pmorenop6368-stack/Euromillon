@@ -19,12 +19,12 @@ p { color: var(--muted); margin: 0 0 14px; }
 .fact span, .fact strong { display: block; }
 .fact strong { font-size: 1.45rem; }
 .panel { margin-bottom: 16px; padding: clamp(16px, 3vw, 25px); background: white; border: 1px solid var(--line); border-radius: 14px; }
-button, input { font: inherit; border-radius: 7px; padding: 8px 11px; }
+button, input, select { font: inherit; border-radius: 7px; padding: 8px 11px; }
 button { border: 1px solid var(--teal); color: white; background: var(--teal); font-weight: 650; cursor: pointer; }
 button:hover { filter: brightness(.9); }
 button:disabled { opacity: .55; cursor: wait; }
 button.secondary { color: var(--teal); background: white; }
-input { border: 1px solid #99aebe; color: var(--ink); max-width: 100%; }
+input, select { border: 1px solid #99aebe; color: var(--ink); max-width: 100%; }
 input[type=number] { width: 70px; }
 :focus-visible { outline: 3px solid #a95b16; outline-offset: 3px; }
 .tickets { display: grid; gap: 10px; }
@@ -45,7 +45,9 @@ summary { cursor: pointer; color: var(--teal); font-weight: 650; }
 .manual { margin-block: 12px; }
 .manual label { display: grid; gap: 4px; }
 .manual button { align-self: end; }
-#evaluation { margin-top: 12px; }
+#evaluation, #companion-results { margin-top: 12px; }
 a { color: var(--teal); }
 footer { padding: 10px 0 28px; }
 @media (max-width: 620px) { .hero { grid-template-columns: 1fr; padding-top: 24px; } .fact { justify-self: start; } nav { font-size: .875rem; gap: 10px; } }
+
+.cadence-output { margin-top: 12px; }

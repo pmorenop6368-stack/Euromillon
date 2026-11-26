@@ -120,6 +120,97 @@ const Euro = (() => {
     return [...row.numeros.map(n => n - 1), ...row.estrellas.map(e => e + 49)];
   }
 
+  function registrarParejas(matrix, values) {
+    for (const a of values) {
+      for (const b of values) {
+        if (a !== b) matrix[a - 1][b - 1]++;
+      }
+    }
+  }
+
+  function matrizParejas(size) {
+    return Array.from({ length: size }, () => new Uint32Array(size));
+  }
+
+  function acompanantes(rows, tipo, valor) {
+    const estrellas = tipo === 'estrellas';
+    const size = estrellas ? 12 : 50;
+    if (!['numeros', 'estrellas'].includes(tipo) ||
+        !Number.isInteger(valor) || valor < 1 || valor > size) {
+      throw Error('Selecciona un número o una estrella válida.');
+    }
+    const counts = new Uint32Array(size);
+    let total = 0, frecuencia = 0;
+    for (const row of rows) {
+      if (estrellas && row.fecha < eraActual) continue;
+      total++;
+      const values = row[tipo];
+      if (!values.includes(valor)) continue;
+      frecuencia++;
+      for (const other of values) if (other !== valor) counts[other - 1]++;
+    }
+    return {
+      total, frecuencia, azar: estrellas ? 2 / 12 : 5 / 50,
+      azarAcompanante: estrellas ? 1 / 11 : 4 / 49,
+      parejas: ranking(counts, size).filter(item => item.value !== valor),
+    };
+  }
+
+  function cadencia(rows, tipo, a, b) {
+    const group = acompanantes(rows, tipo, a);
+    if (!group.parejas.some(item => item.value === b)) throw Error('El acompañante debe ser distinto.');
+    const draws = tipo === 'estrellas' ? rows.filter(row => row.fecha >= eraActual) : rows;
+    const positions = [];
+    for (const [index, row] of draws.entries()) {
+      if (row[tipo].includes(a) && row[tipo].includes(b)) positions.push(index);
+    }
+    const gaps = positions.slice(1).map((position, index) => position - positions[index]).sort((x, y) => x - y);
+    const middle = Math.floor(gaps.length / 2);
+    const median = !gaps.length ? null : gaps.length % 2 ? gaps[middle] :
+      (gaps[middle - 1] + gaps[middle]) / 2;
+    const results = { occurrences: positions.length, median, min: gaps[0], max: gaps.at(-1), scan: null };
+    if (positions.length < 5 || draws.length < 20) return results;
+
+    // Contrasta una concentración de recurrencias respecto de posiciones uniformes,
+    // condicionada al número de apariciones. Busca el máximo también en cada simulación.
+    const length = draws.length;
+    const maxLag = Math.min(52, Math.floor(length / 4));
+    const expectedAt = lag => (length - lag) * positions.length * (positions.length - 1) /
+      (length * (length - 1));
+    const strongest = (indices) => {
+      const events = new Set(indices);
+      let peak = { lag: 1, count: 0, score: -Infinity };
+      for (let lag = 1; lag <= maxLag; lag++) {
+        const count = indices.reduce((sum, index) => sum + Number(events.has(index + lag)), 0);
+        const expected = expectedAt(lag);
+        const score = (count - expected) / Math.sqrt(expected);
+        if (score > peak.score) peak = { lag, count, score };
+      }
+      return peak;
+    };
+    const observed = strongest(positions);
+    let randomState = 21874959;
+    const randomInt = max => {
+      randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0;
+      return Math.floor(randomState / 2 ** 32 * max);
+    };
+    let equalOrLarger = 0;
+    const simulations = 499;
+    for (let i = 0; i < simulations; i++) {
+      const sample = aleatoria(positions.length, length, randomInt).map(value => value - 1);
+      if (strongest(sample).score >= observed.score) equalOrLarger++;
+    }
+    results.scan = { lag: observed.lag, count: observed.count, maxLag,
+      p: (equalOrLarger + 1) / (simulations + 1) };
+    return results;
+  }
+
+  function apostarPorParejas(counts, matrix, amount) {
+    const { value: anchor } = ranking(counts, counts.length)[0];
+    return [anchor, ...ranking(matrix[anchor - 1], counts.length)
+      .filter(item => item.value !== anchor).slice(0, amount - 1).map(item => item.value)];
+  }
+
   function evaluar(rows) {
     const draws = rows.filter(row => row.fecha >= eraActual);
     const calentamiento = 104;
@@ -133,7 +224,9 @@ const Euro = (() => {
     }
     const model = crearModelo();
     const counts = { numeros: Array(50).fill(0), estrellas: Array(12).fill(0) };
+    const parejas = { numeros: matrizParejas(50), estrellas: matrizParejas(12) };
     const totals = {
+      parejas: { numeros: 0, estrellas: 0, premios: 0 },
       modelo: { numeros: 0, estrellas: 0, premios: 0 },
       frecuencia: { numeros: 0, estrellas: 0, premios: 0 },
     };
@@ -152,8 +245,14 @@ const Euro = (() => {
           numeros: ranking(counts.numeros, 50).slice(0, 5).map(x => x.value),
           estrellas: ranking(counts.estrellas, 12).slice(0, 2).map(x => x.value),
         }, draw);
+        tally('parejas', {
+          numeros: apostarPorParejas(counts.numeros, parejas.numeros, 5),
+          estrellas: apostarPorParejas(counts.estrellas, parejas.estrellas, 2),
+        }, draw);
       }
       if (previous) model.observar(previous, draw);
+      registrarParejas(parejas.numeros, draw.numeros);
+      registrarParejas(parejas.estrellas, draw.estrellas);
       for (const n of draw.numeros) counts.numeros[n - 1]++;
       for (const e of draw.estrellas) counts.estrellas[e - 1]++;
     }
@@ -171,7 +270,7 @@ const Euro = (() => {
     return [Math.max(0, center - width), Math.min(1, center + width)];
   }
 
-  return { normalizar, frecuencias, combinaciones, evaluar, intervaloPremios, totalCombinaciones, probPremio };
+  return { normalizar, frecuencias, acompanantes, cadencia, combinaciones, evaluar, intervaloPremios, totalCombinaciones, probPremio };
 })();
 
 if (typeof module !== 'undefined') module.exports = Euro;

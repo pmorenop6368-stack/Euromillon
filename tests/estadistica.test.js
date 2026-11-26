@@ -34,3 +34,22 @@ test('evalúa 957 sorteos y detecta una fecha ausente', () => {
   assert.equal(result.combinacion.estrellas.length, 2);
   assert.throws(() => Euro.evaluar(rows.filter(row => row.fecha !== '2026-11-20')), /sin saltos/);
 });
+
+test('calcula la frecuencia marginal y condicional de las parejas', () => {
+  const info = Euro.acompanantes(rows, 'numeros', 44);
+  assert.equal(info.azar, .1);
+  assert.equal(info.azarAcompanante, 4 / 49);
+  assert.deepEqual(info.parejas[0], { value: 39, count: 29 });
+  assert.equal(info.parejas.reduce((n, pair) => n + pair.count, 0), info.frecuencia * 4);
+});
+
+test('detecta una periodicidad sintética y descarta muestras demasiado cortas', () => {
+  const repeated = Array.from({length: 120}, (_, index) => ({
+    numeros: index % 6 === 0 ? [1, 2, 3, 4, 5] : [1, 6, 7, 8, 9],
+  }));
+  const result = Euro.cadencia(repeated, 'numeros', 1, 2);
+  assert.equal(result.median, 6);
+  assert.equal(result.scan.lag, 6);
+  assert.ok(result.scan.p <= .01);
+  assert.equal(Euro.cadencia(repeated.slice(0, 6), 'numeros', 1, 2).scan, null);
+});

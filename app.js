@@ -71,6 +71,7 @@ function replaceHistory(rows, message) {
   }
   $('evaluate').disabled = count === 0;
   $('export').disabled = count === 0;
+  renderCompanions();
   report(message);
 }
 
@@ -124,6 +125,81 @@ async function readHistory(file) {
   });
 }
 
+function populateCompanionValues() {
+  const select = $('companion-value');
+  const previous = Number(select.value) || 1;
+  const max = $('companion-type').value === 'estrellas' ? 12 : 50;
+  select.replaceChildren();
+  for (let value = 1; value <= max; value++) node('option', twoDigits(value), select).value = value;
+  select.value = Math.min(previous, max);
+}
+
+function renderCompanions() {
+  if (!draws.length) return;
+  const type = $('companion-type').value;
+  const value = Number($('companion-value').value);
+  const data = Euro.acompanantes(draws, type, value);
+  const parent = $('companion-results');
+  parent.replaceChildren();
+  if (!data.total) {
+    node('p', 'Para analizar estrellas se necesitan sorteos del formato de 12 estrellas.', parent);
+    return;
+  }
+  node('p', twoDigits(value) + ' salió en ' + decimal.format(data.frecuencia) + ' de ' +
+    decimal.format(data.total) + ' sorteos (' + percent.format(data.frecuencia / data.total) +
+    '). Referencia en un sorteo justo: ' + percent.format(data.azar) + '.', parent);
+  if (type === 'estrellas') node('p', 'Se usan los sorteos desde el 27/09/2016.', parent);
+  if (!data.frecuencia) return;
+  node('p', 'Si sale ' + twoDigits(value) + ', la probabilidad teórica de que lo acompañe otro valor concreto es ' +
+    percent.format(data.azarAcompanante) + '. La tabla muestra la proporción observada en el histórico.', parent);
+  const table = node('table', null, node('div', null, parent, 'table-wrap'));
+  const header = node('tr', null, node('thead', null, table));
+  for (const text of ['Acompañante', 'Veces juntos', 'Frecuencia si salió ' + twoDigits(value)]) {
+    node('th', text, header).scope = 'col';
+  }
+  const body = node('tbody', null, table);
+  for (const item of data.parejas.slice(0, 5)) {
+    const row = node('tr', null, body);
+    node('td', twoDigits(item.value), row);
+    node('td', decimal.format(item.count), row);
+    node('td', percent.format(item.count / data.frecuencia), row);
+  }
+
+  node('h3', 'Cadencia de una pareja', parent);
+  const controls = node('div', null, parent, 'row');
+  const label = node('label', 'Acompañante', controls);
+  label.htmlFor = 'cadence-partner';
+  const partner = node('select', null, controls);
+  partner.id = 'cadence-partner';
+  for (const item of data.parejas) node('option', twoDigits(item.value), partner).value = item.value;
+  const button = node('button', 'Analizar cadencia', controls);
+  button.type = 'button';
+  const output = node('div', null, parent, 'cadence-output');
+  output.setAttribute('aria-live', 'polite');
+  partner.addEventListener('change', () => output.replaceChildren());
+  button.addEventListener('click', () => {
+    const result = Euro.cadencia(draws, type, value, Number(partner.value));
+    output.replaceChildren();
+    node('p', 'Apariciones conjuntas: ' + decimal.format(result.occurrences) + '.', output);
+    if (result.median != null) {
+      node('p', 'Intervalo mediano: ' + decimal.format(result.median) +
+        ' sorteos registrados. Mínimo: ' + result.min + ' · Máximo: ' + result.max + '.', output);
+    }
+    if (!result.scan) {
+      node('p', 'Hay pocas apariciones para evaluar una cadencia.', output);
+      return;
+    }
+    const { scan } = result;
+    node('p', 'La separación que más destacó fue de ' + scan.lag + ' sorteos (' +
+      scan.count + ' recurrencias). Se buscaron separaciones de 1 a ' + scan.maxLag +
+      ' sorteos y se repitió la misma búsqueda en 499 simulaciones aleatorias.', output);
+    node('p', 'Proporción simulada con un resultado igual o más extremo: ' + percent.format(scan.p) +
+      '. ' + (scan.p < .05
+        ? 'El patrón observado requiere validación con otros sorteos. También influye cuántas parejas se exploren.'
+        : 'La cadencia observada es compatible con el azar.'), output);
+  });
+}
+
 function showEvaluation() {
   const parent = $('evaluation');
   parent.replaceChildren();
@@ -142,7 +218,7 @@ function showEvaluation() {
       for (const value of [name, decimal.format(n), decimal.format(e), prize]) node('td', value, row);
     };
     add('Azar (valor esperado)', .5, 1 / 3, percent.format(Euro.probPremio));
-    for (const [name, data] of [['Frecuencias', result.frecuencia], ['Modelo de IA', result.modelo]]) {
+    for (const [name, data] of [['Frecuencias', result.frecuencia], ['Parejas históricas', result.parejas], ['Modelo de IA', result.modelo]]) {
       add(name, data.numeros / count, data.estrellas / count, percent.format(data.premios / count));
     }
     const [lower, upper] = Euro.intervaloPremios(result.modelo.premios, count);
@@ -167,6 +243,12 @@ $('generator').addEventListener('submit', event => {
   generate(Number($('quantity').value));
 });
 $('evaluate').addEventListener('click', showEvaluation);
+$('companion-type').addEventListener('change', () => {
+  populateCompanionValues();
+  renderCompanions();
+});
+$('companion-value').addEventListener('change', renderCompanions);
+populateCompanionValues();
 $('official').addEventListener('click', () => {
   if (!draws.length || confirm('¿Cargar el histórico oficial? Esto sustituye el histórico personal.')) {
     loadOfficial();

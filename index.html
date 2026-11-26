@@ -31,7 +31,7 @@
     </section>
     <section class="panel" id="laboratorio">
       <h2>Laboratorio de IA</h2>
-      <p>Compara una regresión logística con las frecuencias históricas y el azar. Cada método solo usa sorteos previos. La evaluación de números y estrellas empieza tras los primeros 104 sorteos del formato actual.</p>
+      <p>Compara la IA, las frecuencias y las parejas históricas frente al azar. El método de parejas elige el valor más frecuente y sus acompañantes más repetidos, por separado para números y estrellas. Cada método solo usa sorteos previos. La evaluación de números y estrellas empieza tras los primeros 104 sorteos del formato actual.</p>
       <button id="evaluate" type="button">Evaluar modelo</button>
       <div id="evaluation" aria-live="polite"></div>
     </section>
@@ -45,6 +45,16 @@
         <div><h3>Estrellas por frecuencia</h3><p id="star-coverage"></p><ul class="stats-list" id="stars"></ul></div>
         <div><h3>Parejas de números más repetidas</h3><ul class="stats-list" id="pairs"></ul></div>
       </div>
+    </section>
+    <section class="panel" id="acompanantes">
+      <h2>Con qué valores suele salir</h2>
+      <div class="row">
+        <label for="companion-type">Tipo</label>
+        <select id="companion-type"><option value="numeros">Número</option><option value="estrellas">Estrella</option></select>
+        <label for="companion-value">Valor</label>
+        <select id="companion-value"></select>
+      </div>
+      <div id="companion-results" aria-live="polite"></div>
     </section>
     <section class="panel" id="historico">
       <h2>Gestionar histórico</h2>
