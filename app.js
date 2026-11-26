@@ -222,22 +222,7 @@ async function entrenarIA() {
   const prediccionTensor = model.predict(tf.tensor2d([ultimoSorteoVec]));
   const probabilidades = await prediccionTensor.data();
 
-  // Mapear probabilidades con los números correspondientes
-  const resultadosIA = [];
-  probabilidades.forEach((prob, index) => {
-    resultadosIA.push({ numero: index + 1, probabilidad: (prob * 100).toFixed(2) });
-  });
-
-  resultadosIA.sort((a, b) => b.probabilidad - a.probabilidad);
-
-  const recomendadosIA = resultadosIA.slice(0, 5).map(r => `${r.numero} (${r.probabilidad}%)`);
-
-  statusEl.innerText = '¡Entrenamiento e Inferencia completados!';
-  outputEl.innerHTML = `
-    <h4>🎯 Top 5 Números Sugeridos por la Red Neuronal:</h4>
-    <p><strong>${recomendadosIA.join(' — ')}</strong></p>
-  `;
-// Mapear probabilidades con los números correspondientes
+  // Puntuar los números principales.
   const resultadosIA = [];
   probabilidades.forEach((prob, index) => {
     resultadosIA.push({ numero: index + 1, probabilidad: parseFloat((prob * 100).toFixed(2)) });
@@ -273,11 +258,6 @@ async function entrenarIA() {
   
   outputEl.innerHTML = htmlResultados;
 
-  // Liberar memoria de tensores
-  xs.dispose();
-  ys.dispose();
-  prediccionTensor.dispose();
-}
   // Liberar memoria de tensores
   xs.dispose();
   ys.dispose();
