@@ -98,11 +98,12 @@ const Euro = (() => {
     });
     const features = (row) => [62, ...etiquetas(row)];
     return {
-      predecir(row) {
+      clasificar(row) {
         const output = scores(features(row));
-        const top = (values, count) => ranking(values, values.length).slice(0, count)
-          .map(item => item.value).sort((a, b) => a - b);
-        return { numeros: top(output.slice(0, 50), 5), estrellas: top(output.slice(50), 2) };
+        return {
+          numeros: ranking(output.slice(0, 50), 50).map(item => item.value),
+          estrellas: ranking(output.slice(50), 12).map(item => item.value),
+        };
       },
       observar(previous, actual) {
         const input = features(previous);
@@ -211,7 +212,29 @@ const Euro = (() => {
       .filter(item => item.value !== anchor).slice(0, amount - 1).map(item => item.value)];
   }
 
-  function evaluar(rows) {
+  function reducir(ranked, n, e) {
+    return {
+      numeros: ranked.numeros.slice(0, n).sort((a, b) => a - b),
+      estrellas: ranked.estrellas.slice(0, e).sort((a, b) => a - b),
+    };
+  }
+
+  function coberturaTeorica(n, e) {
+    if (!Number.isInteger(n) || n < 5 || n > 50 || !Number.isInteger(e) || e < 2 || e > 12) {
+      throw Error('Elige entre 5 y 50 números y entre 2 y 12 estrellas.');
+    }
+    const opciones = casos(n, 5) * casos(e, 2);
+    return {
+      opciones,
+      completa: opciones / totalCombinaciones,
+      numeros: casos(n, 5) / casos(50, 5),
+      estrellas: casos(e, 2) / casos(12, 2),
+    };
+  }
+
+  function evaluar(rows, nCandidatos = 10, eCandidatas = 4) {
+    const referencia = coberturaTeorica(nCandidatos, eCandidatas);
+    const cobertura = { completa: 0, numeros: 0, estrellas: 0 };
     const draws = rows.filter(row => row.fecha >= eraActual);
     const calentamiento = 104;
     if (draws.length < calentamiento + 20) throw Error('Se requieren al menos 124 sorteos desde el 27/09/2016.');
@@ -240,7 +263,14 @@ const Euro = (() => {
     for (const [i, draw] of draws.entries()) {
       const previous = draws[i - 1];
       if (i >= calentamiento) {
-        tally('modelo', model.predecir(previous), draw);
+        const ranked = model.clasificar(previous);
+        tally('modelo', reducir(ranked, 5, 2), draw);
+        const candidatos = reducir(ranked, nCandidatos, eCandidatas);
+        const todosNumeros = draw.numeros.every(value => candidatos.numeros.includes(value));
+        const todasEstrellas = draw.estrellas.every(value => candidatos.estrellas.includes(value));
+        cobertura.numeros += Number(todosNumeros);
+        cobertura.estrellas += Number(todasEstrellas);
+        cobertura.completa += Number(todosNumeros && todasEstrellas);
         tally('frecuencia', {
           numeros: ranking(counts.numeros, 50).slice(0, 5).map(x => x.value),
           estrellas: ranking(counts.estrellas, 12).slice(0, 2).map(x => x.value),
@@ -256,9 +286,12 @@ const Euro = (() => {
       for (const n of draw.numeros) counts.numeros[n - 1]++;
       for (const e of draw.estrellas) counts.estrellas[e - 1]++;
     }
+    const ultimaClasificacion = model.clasificar(draws.at(-1));
     return {
       total: draws.length - calentamiento, desde: draws[calentamiento].fecha, hasta: draws.at(-1).fecha,
-      ...totals, combinacion: model.predecir(draws.at(-1)),
+      ...totals, combinacion: reducir(ultimaClasificacion, 5, 2),
+      candidatos: reducir(ultimaClasificacion, nCandidatos, eCandidatas),
+      cobertura, referencia,
     };
   }
 
@@ -270,7 +303,7 @@ const Euro = (() => {
     return [Math.max(0, center - width), Math.min(1, center + width)];
   }
 
-  return { normalizar, frecuencias, acompanantes, cadencia, combinaciones, evaluar, intervaloPremios, totalCombinaciones, probPremio };
+  return { normalizar, frecuencias, acompanantes, cadencia, combinaciones, coberturaTeorica, evaluar, intervaloPremios, totalCombinaciones, probPremio };
 })();
 
 if (typeof module !== 'undefined') module.exports = Euro;

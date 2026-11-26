@@ -25,3 +25,7 @@ Con el histórico incluido, el modelo obtuvo 77 premios en 957 sorteos (8,05 %),
 La cadencia muestra diferencias de posición en el histórico. Busca la separación con mayor exceso estandarizado frente al azar hasta un máximo de 52 sorteos. Para una pareja seleccionada, el contraste usa 499 simulaciones con el mismo número de apariciones, repitiendo la búsqueda de la mejor separación en cada simulación. Si se exploran varias parejas, la cifra de cada pareja no corrige esa búsqueda adicional.
 
 El laboratorio evalúa también una estrategia de parejas que elige el valor más frecuente y sus acompañantes más repetidos sin utilizar sorteos futuros. En el histórico incluido obtuvo algún premio en 71 de 957 sorteos (7,42 %).
+
+## Recorte de candidatos
+
+El laboratorio ordena los cincuenta números y las doce estrellas con el modelo. El usuario elige cuántos candidatos conservar. El recorte contiene C(n, 5) × C(e, 2) combinaciones completas, donde n y e son sus tamaños. La cobertura teórica divide ese recuento por 139.838.160. La evaluación cuenta por separado cuándo el recorte contenía los cinco números, las dos estrellas y la combinación completa. La apuesta experimental de cinco números y dos estrellas permanece disponible como referencia independiente.

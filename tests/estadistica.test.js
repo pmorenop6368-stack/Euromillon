@@ -53,3 +53,18 @@ test('detecta una periodicidad sintética y descarta muestras demasiado cortas',
   assert.ok(result.scan.p <= .01);
   assert.equal(Euro.cadencia(repeated.slice(0, 6), 'numeros', 1, 2).scan, null);
 });
+
+test('mide la cobertura del recorte sin alterar el pronóstico de una apuesta', () => {
+  const frozen = rows.filter(row => row.fecha <= '2026-11-24');
+  const result = Euro.evaluar(frozen, 10, 4);
+  assert.equal(result.referencia.opciones, 1512);
+  assert.equal(result.referencia.completa, 1512 / Euro.totalCombinaciones);
+  assert.deepEqual(result.cobertura, { completa: 0, numeros: 0, estrellas: 99 });
+  assert.equal(result.candidatos.numeros.length, 10);
+  assert.equal(result.candidatos.estrellas.length, 4);
+  const complete = Euro.evaluar(frozen, 50, 12);
+  assert.equal(complete.referencia.completa, 1);
+  assert.equal(complete.cobertura.completa, complete.total);
+  assert.deepEqual(complete.combinacion, result.combinacion);
+  assert.throws(() => Euro.coberturaTeorica(4, 4), /Elige/);
+});

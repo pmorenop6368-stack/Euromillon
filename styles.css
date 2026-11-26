@@ -51,3 +51,5 @@ footer { padding: 10px 0 28px; }
 @media (max-width: 620px) { .hero { grid-template-columns: 1fr; padding-top: 24px; } .fact { justify-self: start; } nav { font-size: .875rem; gap: 10px; } }
 
 .cadence-output { margin-top: 12px; }
+
+.shortlist-title { margin-top: 22px; }

@@ -32,7 +32,11 @@
     <section class="panel" id="laboratorio">
       <h2>Laboratorio de IA</h2>
       <p>Compara la IA, las frecuencias y las parejas históricas frente al azar. El método de parejas elige el valor más frecuente y sus acompañantes más repetidos, por separado para números y estrellas. Cada método solo usa sorteos previos. La evaluación de números y estrellas empieza tras los primeros 104 sorteos del formato actual.</p>
-      <button id="evaluate" type="button">Evaluar modelo</button>
+      <form id="candidate-form" class="row">
+        <label>Números candidatos <input id="candidate-numbers" type="number" min="5" max="50" value="10" required></label>
+        <label>Estrellas candidatas <input id="candidate-stars" type="number" min="2" max="12" value="4" required></label>
+        <button id="evaluate">Evaluar modelo</button>
+      </form>
       <div id="evaluation" aria-live="polite"></div>
     </section>
     <section class="panel" id="estadisticas">

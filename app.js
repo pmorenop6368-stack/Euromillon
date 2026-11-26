@@ -204,7 +204,8 @@ function showEvaluation() {
   const parent = $('evaluation');
   parent.replaceChildren();
   try {
-    const result = Euro.evaluar(draws);
+    const result = Euro.evaluar(draws, Number($('candidate-numbers').value),
+      Number($('candidate-stars').value));
     const count = result.total;
     node('p', decimal.format(count) + ' sorteos evaluados · ' + formatDate(result.desde) + '–' + formatDate(result.hasta), parent);
     const table = node('table', null, node('div', null, parent, 'table-wrap'));
@@ -229,6 +230,29 @@ function showEvaluation() {
         'La diferencia observada requiere comprobarse con nuevos sorteos.'), parent);
     node('h3', 'Combinación experimental del modelo', parent);
     ticket(result.combinacion, parent);
+    node('h3', 'Recorte experimental de candidatos', parent, 'shortlist-title');
+    node('p', decimal.format(result.referencia.opciones) + ' combinaciones completas dentro del recorte. ' +
+      'Con un sorteo justo, su cobertura teórica es ' +
+      (result.referencia.completa < .0001
+        ? '1 entre ' + decimal.format(1 / result.referencia.completa)
+        : percent.format(result.referencia.completa)) + '.', parent);
+    ticket(result.candidatos, parent);
+    const coverage = node('table', null, node('div', null, parent, 'table-wrap'));
+    const coverageHeaders = node('tr', null, node('thead', null, coverage));
+    for (const label of ['El recorte contiene', 'Sorteos observados', 'Sorteos esperados por azar']) {
+      node('th', label, coverageHeaders).scope = 'col';
+    }
+    const coverageBody = node('tbody', null, coverage);
+    for (const [key, label] of [['numeros', 'Los cinco números'], ['estrellas', 'Las dos estrellas'],
+      ['completa', 'La combinación completa']]) {
+      const row = node('tr', null, coverageBody);
+      node('td', label, row);
+      node('td', decimal.format(result.cobertura[key]) + ' de ' + decimal.format(count), row);
+      node('td', decimal.format(result.referencia[key] * count) + ' de ' + decimal.format(count), row);
+    }
+    node('p', 'Un recorte más pequeño deja fuera más combinaciones. Si pruebas varios tamaños, ' +
+      'confirma los resultados con sorteos nuevos antes de atribuirles capacidad predictiva.', parent);
+
   } catch (error) {
     node('p', error.message, parent);
   }
@@ -242,7 +266,11 @@ $('generator').addEventListener('submit', event => {
   event.preventDefault();
   generate(Number($('quantity').value));
 });
-$('evaluate').addEventListener('click', showEvaluation);
+$('candidate-form').addEventListener('submit', event => {
+  event.preventDefault();
+  showEvaluation();
+});
+$('candidate-form').addEventListener('input', () => $('evaluation').replaceChildren());
 $('companion-type').addEventListener('change', () => {
   populateCompanionValues();
   renderCompanions();
