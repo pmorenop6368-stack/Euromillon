@@ -1,265 +1,225 @@
-let baseSorteos = [];
+'use strict';
 
-// Carga automática del sorteos.json local si está subido al servidor/GitHub
-window.addEventListener('DOMContentLoaded', () => {
-  cargarJSONPredeterminado();
-});
+const $ = id => document.getElementById(id);
+const decimal = new Intl.NumberFormat('es-ES', { maximumFractionDigits: 3 });
+const percent = new Intl.NumberFormat('es-ES', { style: 'percent', maximumFractionDigits: 2 });
+const twoDigits = number => String(number).padStart(2, '0');
+const formatDate = date => date.split('-').reverse().join('/');
+const storageKey = 'euromillones-historico-personal-v1';
+let draws = [];
 
-// Función para cargar el archivo JSON por defecto mediante fetch
-function cargarJSONPredeterminado() {
-  fetch('sorteos.json')
-    .then(response => {
-      if (!response.ok) throw new Error('No se encontró el archivo sorteos.json');
-      return response.json();
-    })
-    .then(data => {
-      baseSorteos = data;
-      analizarDatos(baseSorteos);
-      document.getElementById('aiStatus').innerText = 'IA lista para entrenar con el archivo por defecto.';
-    })
-    .catch(err => {
-      console.log('Esperando carga manual de archivo...', err);
-    });
+function node(tag, text, parent, className) {
+  const element = document.createElement(tag);
+  if (text != null) element.textContent = text;
+  if (className) element.className = className;
+  parent.append(element);
+  return element;
 }
 
-// Lector de archivos subidos (.xlsx o .json)
-document.getElementById('fileInput').addEventListener('change', function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
+function ticket(row, parent) {
+  const line = node('div', null, parent, 'ticket');
+  for (const number of row.numeros) node('span', twoDigits(number), line, 'ball');
+  for (const star of row.estrellas) node('span', '★' + twoDigits(star), line, 'ball star');
+  line.setAttribute('aria-label', 'Números ' + row.numeros.join(', ') + '. Estrellas ' + row.estrellas.join(', '));
+}
 
-  const fileName = file.name.toLowerCase();
+function randomInt(max) {
+  const value = new Uint32Array(1);
+  const limit = 2 ** 32 - (2 ** 32 % max);
+  do { crypto.getRandomValues(value); } while (value[0] >= limit);
+  return value[0] % max;
+}
 
-  if (fileName.endsWith('.json')) {
-    const reader = new FileReader();
-    reader.onload = function(evt) {
-      baseSorteos = JSON.parse(evt.target.result);
-      analizarDatos(baseSorteos);
+function generate(quantity) {
+  const parent = $('generated');
+  const rows = Euro.combinaciones(quantity, randomInt);
+  parent.replaceChildren();
+  for (const row of rows) ticket(row, parent);
+}
+
+function report(message) {
+  $('source-status').textContent = message;
+}
+
+function replaceHistory(rows, message) {
+  draws = Euro.normalizar(rows);
+  $('evaluation').replaceChildren();
+  const count = draws.length;
+  const stats = Euro.frecuencias(draws);
+  $('coverage').textContent = decimal.format(count) + ' sorteos · ' +
+    formatDate(draws[0].fecha) + '–' + formatDate(draws.at(-1).fecha);
+  $('star-coverage').textContent = decimal.format(stats.sorteosEstrellas) +
+    ' sorteos con 12 estrellas posibles, desde el 27/09/2016.';
+  const list = (id, items) => {
+    const parent = $(id);
+    parent.replaceChildren();
+    for (const [label, value] of items) node('li', label + ' · ' + value, parent);
+  };
+  const counts = items => items.map(item => [twoDigits(item.value), item.count]);
+  list('hotNumbers', counts(stats.numeros.slice(0, 10)));
+  list('warmNumbers', counts(stats.numeros.slice(20, 30)));
+  list('coldNumbers', counts(stats.numeros.slice(-10).reverse()));
+  list('stars', stats.sorteosEstrellas ? counts(stats.estrellas) : []);
+  list('pairs', stats.pares);
+  const table = $('draws');
+  table.replaceChildren();
+  for (const row of draws.slice(-12).reverse()) {
+    const line = node('tr', null, table);
+    node('td', formatDate(row.fecha), line);
+    node('td', row.numeros.map(twoDigits).join(' · '), line);
+    node('td', row.estrellas.map(twoDigits).join(' · '), line);
+  }
+  $('evaluate').disabled = count === 0;
+  $('export').disabled = count === 0;
+  report(message);
+}
+
+function saveLocal(message) {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(draws));
+  } catch {
+    report(message + ' No se pudo guardar la copia en el navegador. Puedes descargar el JSON.');
+  }
+}
+
+let historyRequest = 0;
+async function loadOfficial() {
+  const request = ++historyRequest;
+  try {
+    const response = await fetch('sorteos.json', { cache: 'no-cache' });
+    if (!response.ok) throw Error('No se pudo cargar sorteos.json.');
+    const rows = await response.json();
+    if (request !== historyRequest) return;
+    replaceHistory(rows, 'Histórico oficial de Loterías y Apuestas del Estado.');
+    try { localStorage.removeItem(storageKey); } catch {}
+  } catch (error) {
+    if (request === historyRequest) report(error.message);
+  }
+}
+
+function spreadsheetDate(value, workbook) {
+  if (typeof value === 'number') {
+    const date = XLSX.SSF.parse_date_code(value, { date1904: !!workbook.Workbook?.WBProps?.date1904 });
+    if (!date) throw Error('Fecha de Excel inválida.');
+    return [date.y, twoDigits(date.m), twoDigits(date.d)].join('-');
+  }
+  const text = String(value ?? '').trim();
+  const parts = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  return parts ? [parts[3], twoDigits(parts[2]), twoDigits(parts[1])].join('-') : text;
+}
+
+async function readHistory(file) {
+  if (/\.json$/i.test(file.name)) return JSON.parse(await file.text());
+  if (!/\.xlsx?$/i.test(file.name)) throw Error('Selecciona un archivo Excel o JSON.');
+  if (typeof XLSX === 'undefined') throw Error('El lector de Excel no está disponible. Usa JSON o recarga la página.');
+  const workbook = XLSX.read(await file.arrayBuffer());
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(sheet).map(raw => {
+    const row = Object.fromEntries(Object.entries(raw).map(([key, value]) => [key.trim().toLowerCase(), value]));
+    return {
+      fecha: spreadsheetDate(row.fecha, workbook),
+      numeros: [1, 2, 3, 4, 5].map(i => Number(row['n' + i] ?? row['numero' + i])),
+      estrellas: [1, 2].map(i => Number(row['e' + i] ?? row['estrella' + i])),
     };
-    reader.readAsText(file);
-  } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-    const reader = new FileReader();
-    reader.onload = function(evt) {
-      const data = new Uint8Array(evt.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const rawData = XLSX.utils.sheet_to_json(sheet);
-
-      // Conversión flexible del Excel a nuestro formato JSON
-      baseSorteos = rawData.map(row => {
-        return {
-          fecha: row.Fecha || row.FECHA || new Date().toISOString().split('T')[0],
-          numeros: [
-            Number(row.N1 || row.Numero1 || row.n1),
-            Number(row.N2 || row.Numero2 || row.n2),
-            Number(row.N3 || row.Numero3 || row.n3),
-            Number(row.N4 || row.Numero4 || row.n4),
-            Number(row.N5 || row.Numero5 || row.n5)
-          ].filter(Boolean),
-          estrellas: [
-            Number(row.E1 || row.Estrella1 || row.e1),
-            Number(row.E2 || row.Estrella2 || row.e2)
-          ].filter(Boolean)
-        };
-      });
-
-      analizarDatos(baseSorteos);
-    };
-    reader.readAsArrayBuffer(file);
-  }
-});
-
-// Agregar sorteo de forma manual
-function agregarSorteo() {
-  const fecha = document.getElementById('newFecha').value;
-  const numInput = document.getElementById('newNumeros').value;
-  const estInput = document.getElementById('newEstrellas').value;
-
-  if (!fecha || !numInput || !estInput) {
-    alert('Completa la fecha, los 5 números y las 2 estrellas.');
-    return;
-  }
-
-  const numeros = numInput.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
-  const estrellas = estInput.split(',').map(e => parseInt(e.trim())).filter(e => !isNaN(e));
-
-  if (numeros.length !== 5 || estrellas.length !== 2) {
-    alert('Asegúrate de ingresar 5 números y 2 estrellas válidas.');
-    return;
-  }
-
-  const nuevoSorteo = { fecha, numeros, estrellas };
-  baseSorteos.unshift(nuevoSorteo);
-
-  analizarDatos(baseSorteos);
-
-  document.getElementById('newNumeros').value = '';
-  document.getElementById('newEstrellas').value = '';
-  alert('Sorteo agregado con éxito.');
-}
-
-// Descargar el JSON actualizado
-function exportarJSON() {
-  if (baseSorteos.length === 0) {
-    alert('No hay datos para exportar.');
-    return;
-  }
-  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(baseSorteos, null, 2));
-  const downloadAnchor = document.createElement('a');
-  downloadAnchor.setAttribute("href", dataStr);
-  downloadAnchor.setAttribute("download", "sorteos.json");
-  document.body.appendChild(downloadAnchor);
-  downloadAnchor.click();
-  downloadAnchor.remove();
-}
-
-// Algoritmo de Análisis Frecuencial + Co-ocurrencia
-function analizarDatos(sorteos) {
-  document.getElementById('totalSorteos').innerText = sorteos.length;
-
-  const freqNum = {};
-  const freqEstrellas = {};
-  const coOcurrenciaNum = {};
-
-  for (let i = 1; i <= 50; i++) { freqNum[i] = 0; coOcurrenciaNum[i] = 0; }
-  for (let i = 1; i <= 12; i++) { freqEstrellas[i] = 0; }
-
-  sorteos.forEach(sorteo => {
-    sorteo.numeros.forEach(num => { if (freqNum[num] !== undefined) freqNum[num]++; });
-    sorteo.estrellas.forEach(est => { if (freqEstrellas[est] !== undefined) freqEstrellas[est]++; });
   });
+}
 
-  const ordenados = Object.keys(freqNum).sort((a, b) => freqNum[b] - freqNum[a]);
-  const calientes = ordenados.slice(0, 10).map(Number);
-  const frios = ordenados.slice(-10).map(Number);
-
-  // Análisis de co-ocurrencia con números calientes
-  sorteos.forEach(sorteo => {
-    const tieneCaliente = sorteo.numeros.some(n => calientes.includes(n));
-    if (tieneCaliente) {
-      sorteo.numeros.forEach(num => {
-        if (!calientes.includes(num)) {
-          coOcurrenciaNum[num]++;
-        }
-      });
+function showEvaluation() {
+  const parent = $('evaluation');
+  parent.replaceChildren();
+  try {
+    const result = Euro.evaluar(draws);
+    const count = result.total;
+    node('p', decimal.format(count) + ' sorteos evaluados · ' + formatDate(result.desde) + '–' + formatDate(result.hasta), parent);
+    const table = node('table', null, node('div', null, parent, 'table-wrap'));
+    const headings = node('tr', null, node('thead', null, table));
+    for (const label of ['Método', 'Números por sorteo', 'Estrellas por sorteo', 'Con premio']) {
+      node('th', label, headings).scope = 'col';
     }
-  });
-
-  const templados = Object.keys(coOcurrenciaNum)
-    .filter(n => !calientes.includes(Number(n)))
-    .sort((a, b) => coOcurrenciaNum[b] - coOcurrenciaNum[a])
-    .slice(0, 10)
-    .map(Number);
-
-  const estrellasOrdenadas = Object.keys(freqEstrellas).sort((a, b) => freqEstrellas[b] - freqEstrellas[a]);
-  const estCalientes = estrellasOrdenadas.slice(0, 3);
-  const estFrias = estrellasOrdenadas.slice(-3);
-  const estTempladas = estrellasOrdenadas.slice(3, -3);
-
-  renderizar('hotNumbers', calientes, 'hot', freqNum);
-  renderizar('warmNumbers', templados, 'warm', coOcurrenciaNum);
-  renderizar('coldNumbers', frios, 'cold', freqNum);
-
-  document.getElementById('hotStars').innerText = estCalientes.join(', ');
-  document.getElementById('warmStars').innerText = estTempladas.join(', ');
-  document.getElementById('coldStars').innerText = estFrias.join(', ');
+    const body = node('tbody', null, table);
+    const add = (name, n, e, prize) => {
+      const row = node('tr', null, body);
+      for (const value of [name, decimal.format(n), decimal.format(e), prize]) node('td', value, row);
+    };
+    add('Azar (valor esperado)', .5, 1 / 3, percent.format(Euro.probPremio));
+    for (const [name, data] of [['Frecuencias', result.frecuencia], ['Modelo de IA', result.modelo]]) {
+      add(name, data.numeros / count, data.estrellas / count, percent.format(data.premios / count));
+    }
+    const [lower, upper] = Euro.intervaloPremios(result.modelo.premios, count);
+    const within = lower <= Euro.probPremio && Euro.probPremio <= upper;
+    node('p', 'Intervalo de confianza del 95 % para la tasa de premios del modelo: ' +
+      percent.format(lower) + '–' + percent.format(upper) + '. ' +
+      (within ? 'El resultado es compatible con el azar.' :
+        'La diferencia observada requiere comprobarse con nuevos sorteos.'), parent);
+    node('h3', 'Combinación experimental del modelo', parent);
+    ticket(result.combinacion, parent);
+  } catch (error) {
+    node('p', error.message, parent);
+  }
 }
 
-function renderizar(elementId, numeros, clase, diccionario) {
-  const contenedor = document.getElementById(elementId);
-  contenedor.innerHTML = '';
-  numeros.forEach(num => {
-    const span = document.createElement('span');
-    span.className = `badge ${clase}`;
-    span.innerText = `N° ${num} (${diccionario[num]})`;
-    contenedor.appendChild(span);
-  });
-}
-
-// Módulo de Inteligencia Artificial (Red Neuronal con TensorFlow.js)
-async function entrenarIA() {
-  if (baseSorteos.length < 5) {
-    alert('Necesitas cargar al menos 5 sorteos para entrenar la IA.');
+$('jackpot').textContent = '1 entre ' + decimal.format(Euro.totalCombinaciones);
+$('any-prize').textContent = percent.format(Euro.probPremio) + ' de algún premio de Euromillones';
+$('evaluate').disabled = true;
+$('export').disabled = true;
+$('generator').addEventListener('submit', event => {
+  event.preventDefault();
+  generate(Number($('quantity').value));
+});
+$('evaluate').addEventListener('click', showEvaluation);
+$('official').addEventListener('click', () => {
+  if (!draws.length || confirm('¿Cargar el histórico oficial? Esto sustituye el histórico personal.')) {
+    loadOfficial();
+  }
+});
+$('manual').addEventListener('submit', event => {
+  event.preventDefault();
+  const split = value => value.split(',').map(x => /^\d+$/.test(x.trim()) ? Number(x) : NaN);
+  const fecha = $('date').value;
+  if (fecha > new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date())) {
+    report('La fecha es posterior a hoy.');
     return;
   }
-
-  const statusEl = document.getElementById('aiStatus');
-  const outputEl = document.getElementById('aiOutput');
-  statusEl.innerText = 'Entrenando Red Neuronal en el navegador...';
-
-  // Preparar matriz de datos (One-Hot Encoding de 50 números)
-  const inputs = [];
-  const outputs = [];
-
-  for (let i = 0; i < baseSorteos.length - 1; i++) {
-    const inputVec = new Array(50).fill(0);
-    const outputVec = new Array(50).fill(0);
-
-    baseSorteos[i + 1].numeros.forEach(n => inputVec[n - 1] = 1);
-    baseSorteos[i].numeros.forEach(n => outputVec[n - 1] = 1);
-
-    inputs.push(inputVec);
-    outputs.push(outputVec);
+  try {
+    const message = 'Sorteo añadido al historial local.';
+    replaceHistory([...draws, { fecha, numeros: split($('numbers').value),
+      estrellas: split($('starInput').value) }], message);
+    historyRequest++;
+    saveLocal(message);
+    event.target.reset();
+  } catch (error) {
+    report(error.message);
   }
+});
+$('fileInput').addEventListener('change', async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const request = ++historyRequest;
+  try {
+    const rows = await readHistory(file);
+    if (request !== historyRequest) return;
+    const message = 'Histórico importado desde ' + file.name + '.';
+    replaceHistory(rows, message);
+    saveLocal(message);
+  } catch (error) {
+    if (request === historyRequest) report(error.message);
+  } finally {
+    if (request === historyRequest) event.target.value = '';
+  }
+});
+$('export').addEventListener('click', () => {
+  if (!draws.length) return;
+  const url = URL.createObjectURL(new Blob([JSON.stringify([...draws].reverse(), null, 2)], { type: 'application/json' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'sorteos.json';
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
 
-  const xs = tf.tensor2d(inputs);
-  const ys = tf.tensor2d(outputs);
-
-  // Crear modelo de Red Neuronal Básica
-  const model = tf.sequential();
-  model.add(tf.layers.dense({ units: 64, activation: 'relu', inputShape: [50] }));
-  model.add(tf.layers.dense({ units: 50, activation: 'sigmoid' }));
-
-  model.compile({ optimizer: 'adam', loss: 'binaryCrossentropy' });
-
-  // Entrenar el modelo durante 30 épocas
-  await model.fit(xs, ys, { epochs: 30 });
-
-  // Predecir probabilidades para el próximo sorteo tomando el último sorteo
-  const ultimoSorteoVec = new Array(50).fill(0);
-  baseSorteos[0].numeros.forEach(n => ultimoSorteoVec[n - 1] = 1);
-
-  const prediccionTensor = model.predict(tf.tensor2d([ultimoSorteoVec]));
-  const probabilidades = await prediccionTensor.data();
-
-  // Puntuar los números principales.
-  const resultadosIA = [];
-  probabilidades.forEach((prob, index) => {
-    resultadosIA.push({ numero: index + 1, probabilidad: parseFloat((prob * 100).toFixed(2)) });
-  });
-
-  // Ordenar de mayor a menor probabilidad
-  resultadosIA.sort((a, b) => b.probabilidad - a.probabilidad);
-
-  // Tomamos los 5 mejores números
-  const top5 = resultadosIA.slice(0, 5);
-
-  statusEl.innerText = '¡Entrenamiento e Inferencia completados!';
-
-  // Renderizar las bolas de la combinación y sus probabilidades
-  let htmlResultados = `
-    <h4>🎯 Combinación Sugerida por la Red Neuronal:</h4>
-    <div class="combinacion-resultado" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
-  `;
-
-  top5.forEach(item => {
-    const numFormateado = String(item.numero).padStart(2, '0');
-    htmlResultados += `
-      <div style="text-align: center;">
-        <span class="badge hot" style="font-size: 1.2rem; padding: 10px 15px; border-radius: 50%; display: inline-block;">
-          ${numFormateado}
-        </span>
-        <div style="font-size: 0.8rem; color: #666; margin-top: 4px;">${item.probabilidad}%</div>
-      </div>
-    `;
-  });
-
-  htmlResultados += `</div>`;
-  
-  outputEl.innerHTML = htmlResultados;
-
-  // Liberar memoria de tensores
-  xs.dispose();
-  ys.dispose();
-  prediccionTensor.dispose();
-}
+generate(1);
+try {
+  const local = localStorage.getItem(storageKey);
+  if (local) replaceHistory(JSON.parse(local), 'Histórico personal guardado en este navegador.');
+} catch {}
+if (!draws.length) loadOfficial();
